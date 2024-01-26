@@ -17,6 +17,7 @@ const src = "C:\\Windows\\System32\\Drivers\\etc\\hosts"
 const backupName = "./backups/hosts"
 const whitelistsFile = "./whitelist.txt"
 const blocklistsFile = "./blocklists.txt"
+const blacklistsFile = "./blacklists.txt"
 
 func backupHostFile() {
 	_ = os.Mkdir("backups", os.ModePerm)
@@ -142,6 +143,14 @@ func updateAllBlocklists() {
 			backupHostStr = updateHostFile(scanner.Text(), backupHostStr, whitelistedDomains)
 		}
 	}
+
+	// Add blacklisted domains
+	blacklist, _ := os.Open(blacklistsFile)
+	blacklistScanner := bufio.NewScanner(blacklist)
+	for blacklistScanner.Scan() {
+		backupHostStr += fmt.Sprintf("%s\n", blacklistScanner.Text())
+	}
+
 	f, _ = os.OpenFile(src, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	defer f.Close()
 	err = f.Truncate(0)
@@ -150,16 +159,18 @@ func updateAllBlocklists() {
 }
 
 func whitelistDomain(domain string) {
-	f, err := os.OpenFile(whitelistsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-
+	readOnly, _ := os.Open(whitelistsFile)
+	scanner := bufio.NewScanner(readOnly)
 	for scanner.Scan() {
 		if scanner.Text() == domain {
 			fmt.Printf("%s has already been whitelisted!\n", domain)
 			return
 		}
 	}
+
+	f, err := os.OpenFile(whitelistsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer f.Close()
+
 	_, err = f.WriteString(fmt.Sprintf("%s\n", domain))
 	if err != nil {
 		fmt.Println(err)
@@ -167,10 +178,30 @@ func whitelistDomain(domain string) {
 	fmt.Println(fmt.Sprintf("%s has been whitelisted!", domain))
 }
 
+func blacklistDomain(domain string) {
+	readOnly, _ := os.Open(blacklistsFile)
+	scanner := bufio.NewScanner(readOnly)
+	for scanner.Scan() {
+		if scanner.Text() == domain {
+			fmt.Printf("%s has already been blacklisted!\n", domain)
+			return
+		}
+	}
+	f, err := os.OpenFile(blacklistsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer f.Close()
+
+	_, err = f.WriteString(fmt.Sprintf("%s\n", domain))
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(fmt.Sprintf("%s has been blacklisted!", domain))
+}
+
 func main() {
 	blocklistURL := flag.String("blocklist", "", "URL of blocklist to add")
 	updateAllFlag := flag.Bool("update", false, "Update all blocklists")
 	whitelistDomainFlag := flag.String("whitelist", "", "Domain to whitelist")
+	blacklistDomainFlag := flag.String("blacklist", "", "Domain to blacklist")
 	flag.Parse()
 
 	// Create required files if they don't exist on first run
@@ -185,13 +216,19 @@ func main() {
 		bl, _ := os.Create(blocklistsFile)
 		bl.Close()
 	}
-
+	if _, err := os.Stat(blacklistsFile); errors.Is(err, os.ErrNotExist) {
+		bl, _ := os.Create(blacklistsFile)
+		bl.Close()
+	}
 	if *blocklistURL != "" {
 		addBlocklist(*blocklistURL)
 		updateAllBlocklists()
 	}
 	if *whitelistDomainFlag != "" {
 		whitelistDomain(*whitelistDomainFlag)
+	}
+	if *blacklistDomainFlag != "" {
+		blacklistDomain(*blacklistDomainFlag)
 	}
 	if *updateAllFlag {
 		updateAllBlocklists()
