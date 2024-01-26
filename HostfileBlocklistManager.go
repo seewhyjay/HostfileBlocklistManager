@@ -148,7 +148,7 @@ func updateAllBlocklists() {
 	blacklist, _ := os.Open(blacklistsFile)
 	blacklistScanner := bufio.NewScanner(blacklist)
 	for blacklistScanner.Scan() {
-		backupHostStr += fmt.Sprintf("%s\n", blacklistScanner.Text())
+		backupHostStr += fmt.Sprintf("127.0.0.1 %s\n", blacklistScanner.Text())
 	}
 
 	f, _ = os.OpenFile(src, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
