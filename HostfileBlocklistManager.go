@@ -71,7 +71,12 @@ func updateHostFile(url string, hostfile string, whitelist []string) (updatedHos
 			if slices.Contains(whitelist, domain) {
 				continue
 			}
-			hostfile += fmt.Sprintf("%s\n", line)
+
+			if strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0") {
+				hostfile += fmt.Sprintf("%s\n", line)
+			} else {
+				hostfile += fmt.Sprintf("127.0.0.1 %s\n", line)
+			}
 		}
 	}
 	return hostfile
