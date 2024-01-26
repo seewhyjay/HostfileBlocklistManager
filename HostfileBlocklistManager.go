@@ -9,10 +9,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
+	"strings"
 )
 
 const src = "C:\\Windows\\System32\\Drivers\\etc\\hosts"
 const backupName = "./backups/hosts"
+const whitelistsFile = "./whitelist.txt"
+const blocklistsFile = "./blocklists.txt"
 
 func backupHostFile() {
 	_ = os.Mkdir("backups", os.ModePerm)
@@ -38,7 +42,7 @@ func backupHostFile() {
 }
 
 // https://stackoverflow.com/a/33853856
-func updateHostFile(url string, hostfile string) (updatedHostfile string) {
+func updateHostFile(url string, hostfile string, whitelist []string) (updatedHostfile string) {
 
 	// Get the data
 	resp, err := http.Get(url)
@@ -62,6 +66,10 @@ func updateHostFile(url string, hostfile string) (updatedHostfile string) {
 			continue
 		}
 		if line[0:1] != "#" {
+			domain := strings.Split(line, " ")[1]
+			if slices.Contains(whitelist, domain) {
+				continue
+			}
 			hostfile += fmt.Sprintf("%s\n", line)
 		}
 	}
@@ -70,7 +78,7 @@ func updateHostFile(url string, hostfile string) (updatedHostfile string) {
 
 func addBlocklist(url string) {
 	// check if blocklists file already exists
-	f, err := os.Open("blocklists.txt")
+	f, err := os.Open(blocklistsFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,7 +99,7 @@ func addBlocklist(url string) {
 		log.Fatal(err)
 	}
 
-	writeFile, err := os.OpenFile("blocklists.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	writeFile, err := os.OpenFile(blocklistsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer writeFile.Close()
 
 	_, err = writeFile.WriteString(fmt.Sprintf("%s\n", url))
@@ -102,12 +110,20 @@ func addBlocklist(url string) {
 }
 
 func updateAllBlocklists() {
-	f, err := os.Open("blocklists.txt")
+	f, err := os.Open(blocklistsFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// remember to close the file at the end of the program
 	defer f.Close()
+
+	// read and load whitelists
+	var whitelistedDomains []string
+	whitelist, _ := os.Open(whitelistsFile)
+	whitelistScanner := bufio.NewScanner(whitelist)
+	for whitelistScanner.Scan() {
+		whitelistedDomains = append(whitelistedDomains, whitelistScanner.Text())
+	}
 
 	// read backup
 	backupHost, _ := os.ReadFile(backupName)
@@ -123,7 +139,7 @@ func updateAllBlocklists() {
 		}
 		if line[0:4] == "http" {
 			fmt.Println(fmt.Sprintf("Updating %s", scanner.Text()))
-			backupHostStr = updateHostFile(scanner.Text(), backupHostStr)
+			backupHostStr = updateHostFile(scanner.Text(), backupHostStr, whitelistedDomains)
 		}
 	}
 	f, _ = os.OpenFile(src, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
@@ -133,17 +149,49 @@ func updateAllBlocklists() {
 	_, _ = f.WriteString(backupHostStr)
 }
 
+func whitelistDomain(domain string) {
+	f, err := os.OpenFile(whitelistsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+
+	for scanner.Scan() {
+		if scanner.Text() == domain {
+			fmt.Printf("%s has already been whitelisted!\n", domain)
+			return
+		}
+	}
+	_, err = f.WriteString(fmt.Sprintf("%s\n", domain))
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(fmt.Sprintf("%s has been whitelisted!", domain))
+}
+
 func main() {
-	blocklistURL := flag.String("blocklist", "", "URL of blpcklist to add")
+	blocklistURL := flag.String("blocklist", "", "URL of blocklist to add")
 	updateAllFlag := flag.Bool("update", false, "Update all blocklists")
+	whitelistDomainFlag := flag.String("whitelist", "", "Domain to whitelist")
 	flag.Parse()
 
+	// Create required files if they don't exist on first run
 	if _, err := os.Stat(backupName); errors.Is(err, os.ErrNotExist) {
 		backupHostFile()
 	}
+	if _, err := os.Stat(whitelistsFile); errors.Is(err, os.ErrNotExist) {
+		wl, _ := os.Create(whitelistsFile)
+		wl.Close()
+	}
+	if _, err := os.Stat(blocklistsFile); errors.Is(err, os.ErrNotExist) {
+		bl, _ := os.Create(blocklistsFile)
+		bl.Close()
+	}
+
 	if *blocklistURL != "" {
 		addBlocklist(*blocklistURL)
 		updateAllBlocklists()
+	}
+	if *whitelistDomainFlag != "" {
+		whitelistDomain(*whitelistDomainFlag)
 	}
 	if *updateAllFlag {
 		updateAllBlocklists()
