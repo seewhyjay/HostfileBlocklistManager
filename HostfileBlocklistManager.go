@@ -53,11 +53,9 @@ func updateHostFile(url string, hostfile string) (updatedHostfile string) {
 		//return fmt.Errorf("bad status: %s", resp.Status)
 		fmt.Printf("bad status: %s", resp.Status)
 	}
-	//src := "C:\\Windows\\System32\\Drivers\\etc\\hosts"
-	//writeFile, err := os.OpenFile(src, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
 	scanner := bufio.NewScanner(resp.Body)
-	//_, _ = writeFile.WriteString(fmt.Sprintf("# %s\n", url))
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if len(line) < 1 {
@@ -65,14 +63,8 @@ func updateHostFile(url string, hostfile string) (updatedHostfile string) {
 		}
 		if line[0:1] != "#" {
 			hostfile += fmt.Sprintf("%s\n", line)
-			//_, err = writeFile.WriteString(fmt.Sprintf("%s\n", line))
-			//if err != nil {
-			//	fmt.Println("Error writing blocked domain to host file")
-			//}
 		}
 	}
-	//_, _ = writeFile.WriteString("# End of Section")
-	//writeFile.Close()
 	return hostfile
 }
 
@@ -145,12 +137,10 @@ func main() {
 	blocklistURL := flag.String("blocklist", "", "URL of blpcklist to add")
 	updateAllFlag := flag.Bool("update", false, "Update all blocklists")
 	flag.Parse()
-	//updateHostFile("https://adaway.org/hosts.txt")
+
 	if _, err := os.Stat(backupName); errors.Is(err, os.ErrNotExist) {
 		backupHostFile()
 	}
-	//addBlocklist("https://raw.githubusercontent.com/PolishFiltersTeam/KADhosts/master/KADhosts.txt")
-	//updateAllBlocklists()
 	if *blocklistURL != "" {
 		addBlocklist(*blocklistURL)
 		updateAllBlocklists()
