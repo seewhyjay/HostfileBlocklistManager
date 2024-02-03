@@ -24,12 +24,16 @@ func backupHostFile() {
 
 	fin, err := os.Open(src)
 	if err != nil {
+		fmt.Printf("Unable to backup your hosts file due to: %s\n This might be due to you not running this "+
+			"in an elevated shell.", err)
 		log.Fatal(err)
 	}
 	defer fin.Close()
 
 	fout, err := os.Create(backupName)
 	if err != nil {
+		fmt.Printf("Unable to backup your hosts file due to: %s\n This might be due to you not running this "+
+			"in an elevated shell.", err)
 		log.Fatal(err)
 	}
 	defer fout.Close()
@@ -38,8 +42,8 @@ func backupHostFile() {
 
 	if err != nil {
 		log.Fatal(err)
-		fmt.Println("Backed up your host file!")
 	}
+	fmt.Println("Backed up your host file!")
 }
 
 // https://stackoverflow.com/a/33853856
@@ -49,14 +53,19 @@ func updateHostFile(url string, hostfile string, whitelist []string) (updatedHos
 	resp, err := http.Get(url)
 	if err != nil {
 		//return err
-		fmt.Println(err)
+		fmt.Printf("Unable to fetch %s due to %s\nSkipping.", url, err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			// Doesn't really matter
+		}
+	}(resp.Body)
 
 	// Check server response
 	if resp.StatusCode != http.StatusOK {
 		//return fmt.Errorf("bad status: %s", resp.Status)
-		fmt.Printf("bad status: %s", resp.Status)
+		fmt.Printf("%s gave bad status: %s\nSkippping.", url, resp.Status)
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -88,8 +97,12 @@ func addBlocklist(url string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// remember to close the file at the end of the program
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(f)
 
 	// read the file line by line using scanner
 	scanner := bufio.NewScanner(f)
@@ -106,13 +119,17 @@ func addBlocklist(url string) {
 	}
 
 	writeFile, err := os.OpenFile(blocklistsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer writeFile.Close()
+	defer func(writeFile *os.File) {
+		err := writeFile.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(writeFile)
 
 	_, err = writeFile.WriteString(fmt.Sprintf("%s\n", url))
 	if err != nil {
 		fmt.Printf("There was an issue adding %s to blocklists\n", url)
 	}
-	writeFile.Close()
 }
 
 func updateAllBlocklists() {
@@ -121,7 +138,12 @@ func updateAllBlocklists() {
 		log.Fatal(err)
 	}
 	// remember to close the file at the end of the program
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(f)
 
 	// read and load whitelists
 	var whitelistedDomains []string
@@ -157,7 +179,12 @@ func updateAllBlocklists() {
 	}
 
 	f, _ = os.OpenFile(src, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(f)
 	err = f.Truncate(0)
 	_, err = f.Seek(0, 0)
 	_, _ = f.WriteString(backupHostStr)
@@ -174,7 +201,12 @@ func whitelistDomain(domain string) {
 	}
 
 	f, err := os.OpenFile(whitelistsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(f)
 
 	_, err = f.WriteString(fmt.Sprintf("%s\n", domain))
 	if err != nil {
@@ -193,7 +225,12 @@ func blacklistDomain(domain string) {
 		}
 	}
 	f, err := os.OpenFile(blacklistsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(f)
 
 	_, err = f.WriteString(fmt.Sprintf("%s\n", domain))
 	if err != nil {
@@ -215,15 +252,24 @@ func main() {
 	}
 	if _, err := os.Stat(whitelistsFile); errors.Is(err, os.ErrNotExist) {
 		wl, _ := os.Create(whitelistsFile)
-		wl.Close()
+		err := wl.Close()
+		if err != nil {
+			return
+		}
 	}
 	if _, err := os.Stat(blocklistsFile); errors.Is(err, os.ErrNotExist) {
 		bl, _ := os.Create(blocklistsFile)
-		bl.Close()
+		err := bl.Close()
+		if err != nil {
+			return
+		}
 	}
 	if _, err := os.Stat(blacklistsFile); errors.Is(err, os.ErrNotExist) {
 		bl, _ := os.Create(blacklistsFile)
-		bl.Close()
+		err := bl.Close()
+		if err != nil {
+			return
+		}
 	}
 	if *blocklistURL != "" {
 		addBlocklist(*blocklistURL)
